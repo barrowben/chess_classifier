@@ -13,7 +13,9 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from numpy.linalg import eig
+# Bad things I will remove later
+from sklearn.manifold import LocallyLinearEmbedding
+import math
 
 N_DIMENSIONS = 10
 
@@ -68,9 +70,34 @@ def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
     # Project training set onto 10D plane
     W10 = eigenvectors.T[:,:10]
     reduced_data = data_centered.dot(W10)
-    # print(reduced_data.shape)
+
+    # Produces poor results (Clean: 18.6%, Noisy: 42.6%)
+    # reduced_data = lle_reduce(data)
 
     return reduced_data
+
+def lle_reduce(X):
+    lle = LocallyLinearEmbedding(n_components=10, n_neighbors=10)
+    X_reduced = lle.fit_transform(X)
+    return X_reduced
+
+def euclideanDistance(instance1, instance2, length):
+    distance = 0
+    for x in range(length):
+        distance += pow((instance1[x] - instance2[x]), 2)
+    return math.sqrt(distance)
+    
+# def getKNeighbors(trainingSet, testInstance, k):
+#     distances = []
+#     length = len(testInstance)-1
+#     for x in range(len(trainingSet)):
+#         dist = euclideanDistance(testInstance, trainingSet[x], length)
+#         distances.append((trainingSet[x], dist))
+#     distances.sort(key=operator.itemgetter(1))
+#     neighbors = []
+#     for x in range(k):
+#         neighbors.append(distances[x][0])
+#     return neighbors
 
 def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) -> dict:
     """Process the labeled training data and return model parameters stored in a dictionary.
@@ -87,11 +114,11 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
     """
 
     # Check display of a chess tile
-    # test_index = 7
-    # square_image = np.reshape(fvectors_train[test_index, :], (50, 50), order="C") # Use C-Like index order
-    # print (labels_train[test_index])
-    # plt.matshow(square_image, cmap=cm.Greys_r)
-    # plt.show()
+    test_index = 7
+    square_image = np.reshape(fvectors_train[test_index, :], (50, 50), order="C") # Use C-Like index order
+    print (labels_train[test_index])
+    plt.matshow(square_image, cmap=cm.Greys_r)
+    plt.show()
 
     # Center the data
     mean = fvectors_train.mean(axis=0)
@@ -119,7 +146,6 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
     model["fvectors_train"] = fvectors_train_reduced.tolist()
 
     return model
-
 
 def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data, features=None):
     if features is None:
