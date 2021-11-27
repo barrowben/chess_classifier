@@ -1,0 +1,49 @@
+What do we know with the board:
+    + Total Number of pieces
+    + Positions
+    + Relative positions
+
++ Make confusion matrix
++ Elimate illegal positions
++ Check which pieces are commonly mistaken which
++ Higher chance of black piece being in top rows
++ Higher chance of white piece beng in bottom rows
+
+
+++ Total number of pieces of that class
+++ Starting position of the class
+++ 
+
+
+// loop through all the predicted labels
+// then iterate through all pieces on one board
+
+total_labels = predictions.size()
+number_boards = total_labels / 64
+
+i = 0
+j = 63
+for board in number_boards: #125
+    for square in range (i, j):
+        foo()
+        i = j+1
+        j = j+64
+
+for label in labels:
+    for square in range (64):
+        foo()
+
+
+SIMEON
++ knights on the rim are grim is a pretty old chess adage
++ technically there are squares that pieces tend to be more naturally placed on (i.e Nf3 or E4) but it wouldn’t be a hard or fast rule
++ No King on square covered by enemy piece
++ Pawns in top or bottom row illegal
++ Bishops on long diagonals
+
+
+ k nearest neighbours
+ weighted
+ weights depend on likelihood
+    so, if it is impossible to have a pawn in top row, weight = 0
+    if it is very likely to have a 
