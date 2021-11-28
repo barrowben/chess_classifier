@@ -19,54 +19,6 @@ from sklearn.manifold import LocallyLinearEmbedding
 
 N_DIMENSIONS = 10
 
-def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> List[str]:
-  """Classify a set of feature vectors using a training set.
-
-  Args:
-      train (np.ndarray): 2-D array storing the training feature vectors.
-      train_labels (np.ndarray): 1-D array storing the training labels.
-      test (np.ndarray): 2-D array storing the test feature vectors.
-
-  Returns:
-      list[str]: A list of one-character strings representing the labels for each square.
-  
-  It is possible to switch between nearest neighbour using cosine distance and
-  k-nearest-neighbour using euclidean distance.
-  """
-  # # Nearest Neighbour
-  # label = nearest_neighbour(train, train_labels, test)
-
-  # # K Nearest Neighbour - 5 neighbours produces optimal results
-  label = k_nearest_neighbour(train, train_labels, test, 5)
-
-  return label
-
-def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
-  """Reduce the dimensionality of a set of feature vectors down to N_DIMENSIONS.
-
-  The feature vectors are stored in the rows of 2-D array data, (i.e., a data matrix).
-  The dummy implementation below simply returns the first N_DIMENSIONS columns.
-
-  Args:
-      data (np.ndarray): The feature vectors to reduce.
-      model (dict): A dictionary storing the model data that may be needed.
-
-  Returns:
-      np.ndarray: The reduced feature vectors.
-  """
-  # PCA assumes data is centred, so we need to subtract the mean
-  data_centered = data - model["mean"]
-  eigenvectors = np.array(model["eigenvectors"])
-
-  # Project training set onto 10D plane
-  W10 = eigenvectors.T[:,:10]
-  reduced_data = data_centered.dot(W10)
-
-  # Produces poor results (Clean: 18.6%, Noisy: 42.6%)
-  # reduced_data = lle_reduce(data)
-
-  return reduced_data
-
 def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) -> dict:
   """Process the labeled training data and return model parameters stored in a dictionary.
 
@@ -80,14 +32,6 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
   Returns:
       dict: a dictionary storing the model data.
   """
-
-  # Check display of a chess tile
-  # test_index = 7
-  # square_image = np.reshape(fvectors_train[test_index, :], (50, 50), order="C") # Use C-Like index order
-  # print (labels_train[test_index])
-  # plt.matshow(square_image, cmap=cm.Greys_r)
-  # plt.show()
-
   # Center the data
   mean = fvectors_train.mean(axis=0)
   data_centered = fvectors_train - mean
@@ -115,6 +59,54 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
 
   return model
 
+def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
+  """Reduce the dimensionality of a set of feature vectors down to N_DIMENSIONS.
+
+  The feature vectors are stored in the rows of 2-D array data, (i.e., a data matrix).
+  The dummy implementation below simply returns the first N_DIMENSIONS columns.
+
+  Args:
+      data (np.ndarray): The feature vectors to reduce.
+      model (dict): A dictionary storing the model data that may be needed.
+
+  Returns:
+      np.ndarray: The reduced feature vectors.
+  """
+  # PCA assumes data is centered, so we need to subtract the mean
+  data_centered = data - model["mean"]
+  eigenvectors = np.array(model["eigenvectors"])
+
+  # Project training set onto 10D plane
+  W10 = eigenvectors.T[:,:10]
+  reduced_data = data_centered.dot(W10)
+
+  # Produces poor results (Clean: 18.6%, Noisy: 42.6%)
+  # reduced_data = lle_reduce(data)
+
+  return reduced_data
+
+def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> List[str]:
+  """Classify a set of feature vectors using a training set.
+
+  Args:
+      train (np.ndarray): 2-D array storing the training feature vectors.
+      train_labels (np.ndarray): 1-D array storing the training labels.
+      test (np.ndarray): 2-D array storing the test feature vectors.
+
+  Returns:
+      list[str]: A list of one-character strings representing the labels for each square.
+  
+  It is possible to switch between nearest neighbour using cosine distance and
+  k-nearest-neighbour using euclidean distance.
+  """
+  # # Nearest Neighbour
+  # label = nearest_neighbour(train, train_labels, test)
+
+  # # K Nearest Neighbour - 5 neighbours produces optimal results
+  label = k_nearest_neighbour(train, train_labels, test, 5)
+
+  return label
+
 def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):    
   # Nearest Neighbour
   x = np.dot(chess_test_data, chess_train_data.transpose())
@@ -130,13 +122,11 @@ def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):
 
 def k_nearest_neighbour(data, labels, test, k):
   label = []
-  index = 0
   for sample in test:
     difference = (data - sample)
-    distances = np.sum(difference * difference, axis=1) # Euclidean distance
+    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
     nearest = labels[np.argsort(distances)[:k]]
     label += mode(nearest)[0][0] # Modal neighbour
-    index += 1
 
   return label
 
@@ -192,9 +182,6 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   you can infer the position on the board from the position of the feature vector
   in the feature vector array.
 
-  In the dummy code below, we just re-use the simple classify_squares function,
-  i.e. we ignore the ordering.
-
   Args:
     fvectors_test (np.ndarray): An array in which feature vectors are stored as rows.
     model (dict): A dictionary storing the model data.
@@ -202,35 +189,33 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   Returns:
     list[str]: A list of one-character strings representing the labels for each square.
   """
+  fvectors_train = np.array(model["fvectors_train"])
+  labels_train = np.array(model["labels_train"])
+  number_boards = int(fvectors_test.shape[0] / 64) # This assumes only whole boards are passed in
 
-  return classify_squares(fvectors_test, model)
-
-### [NOT USED] ###
-def divergence(class1, class2):
-  """compute a vector of 1-D divergences
+  # Call the classify function.
+  labels = k_nearest_neighbour_weighted(fvectors_train, labels_train, fvectors_test, number_boards, 5)
   
-  class1 - data matrix for class 1, each row is a sample
-  class2 - data matrix for class 2
-  
-  returns: d12 - a vector of 1-D divergence scores
-  """
+  # return classify(fvectors_train, labels_train, fvectors_test)
+  return labels
 
-  # Compute the mean and variance of each feature vector element
-  m1 = np.mean(class1, axis=0)
-  m2 = np.mean(class2, axis=0)
-  v1 = np.var(class1, axis=0)
-  v2 = np.var(class2, axis=0)
+def k_nearest_neighbour_weighted(data, labels, test, number_boards, k):
+  label = []
+  i = 0
+  j = 64
+  for board in range(number_boards):
+    for square in range(i, j):
+      difference = (data - test[square])
+      distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+      nearest = labels[np.argsort(distances)]
 
-  # Plug mean and variances into the formula for 1-D divergence.
-  # (Note that / and * are being used to compute multiple 1-D
-  #  divergences without the need for a loop)
-  d12 = 0.5 * (v1 / v2 + v2 / v1 - 2) + 0.5 * (m1 - m2) * (m1 - m2) * (
-    1.0 / v1 + 1.0 / v2
-  )
+      # Remove the pawns from NN if they are in the top or bottom rows (illegal position)
+      if (i <= square < (i+8)) or ((j-8) <= square < j):
+        nearest = nearest[(nearest != 'p') & (nearest != 'P')]
 
-  return d12
-
-def lle_reduce(X):
-  lle = LocallyLinearEmbedding(n_components=10, n_neighbors=10)
-  X_reduced = lle.fit_transform(X)
-  return X_reduced
+      weighted = nearest[:k]
+      label += mode(weighted)[0][0] # Modal neighbour
+    i = j
+    j = j + 64
+    
+  return label

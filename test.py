@@ -14,6 +14,36 @@ def test(board_metadata: list, image_dir: str):
     model_data = system.process_training_data(fvectors_train, labels_train)
 
 
+### [NOT USED] ###
+def divergence(class1, class2):
+  """compute a vector of 1-D divergences
+  
+  class1 - data matrix for class 1, each row is a sample
+  class2 - data matrix for class 2
+  
+  returns: d12 - a vector of 1-D divergence scores
+  """
+
+  # Compute the mean and variance of each feature vector element
+  m1 = np.mean(class1, axis=0)
+  m2 = np.mean(class2, axis=0)
+  v1 = np.var(class1, axis=0)
+  v2 = np.var(class2, axis=0)
+
+  # Plug mean and variances into the formula for 1-D divergence.
+  # (Note that / and * are being used to compute multiple 1-D
+  #  divergences without the need for a loop)
+  d12 = 0.5 * (v1 / v2 + v2 / v1 - 2) + 0.5 * (m1 - m2) * (m1 - m2) * (
+    1.0 / v1 + 1.0 / v2
+  )
+
+  return d12
+
+# def lle_reduce(X):
+#   lle = LocallyLinearEmbedding(n_components=10, n_neighbors=10)
+#   X_reduced = lle.fit_transform(X)
+#   return X_reduced
+
 def main():
     """Train the classifier and save the model."""
 

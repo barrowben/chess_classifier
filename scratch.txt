@@ -47,3 +47,24 @@ SIMEON
  weights depend on likelihood
     so, if it is impossible to have a pawn in top row, weight = 0
     if it is very likely to have a 
+
+
+
+
+    REPORT POINTS:
+    * Leave out sqrt in euclidean distance measure as it is an expensive monotonic function and we only care about the ordering
+    * Euclidean distance performs better than cosine distance in KNN
+    * PCA seems like a good approach as 10-pixel limitation won't allow much improvement, better to focus on classifier
+    * Removing pawns from illegal positions make 0.1% difference for the noisy data
+
+
+relative to board number (1 - 25)
+i = lower bound (0)
+j = upper bound (64)
+board = 1
+
+x > i and x < i + 8
+x < board * 64
+
+    1: 0 < x < 8, 56 < x < 64
+    2: 64 < x < 72, 120 < x < 128
