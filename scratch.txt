@@ -56,6 +56,14 @@ SIMEON
     * Euclidean distance performs better than cosine distance in KNN
     * PCA seems like a good approach as 10-pixel limitation won't allow much improvement, better to focus on classifier
     * Removing pawns from illegal positions make 0.1% difference for the noisy data
+    * If black king/queen was already identified, remove from candidates: k/q tends to be in top half of board
+    * If classify as White K in top half, disregard
+    * White K tends to be in bottom half
+    * Above 3 points lead to 0.3% lift
+    * If 2 black rooks already identified, disregard further
+    * bishops quite unique and rarely misclassified, no need to disregard
+    
+
 
 
 relative to board number (1 - 25)
