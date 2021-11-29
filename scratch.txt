@@ -62,8 +62,13 @@ SIMEON
     * Above 3 points lead to 0.3% lift
     * If 2 black rooks already identified, disregard further
     * bishops quite unique and rarely misclassified, no need to disregard
-    
+    * If nearest 5 neighbours of second or penultimate row contain pawn, class as that pawn
+        +0.1% lift clean
+        +0.3% lift noisy
 
+
+    so far 5.2% more accurate in board mode than benchmark
+Board mode: score = 95.1% correct
 
 
 relative to board number (1 - 25)

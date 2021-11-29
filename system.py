@@ -14,10 +14,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from scipy.stats import mode
-# TEMP, REMOVE ALL SCIKIT LEARN BEFORE HANDIN
-from sklearn.manifold import LocallyLinearEmbedding
 
 N_DIMENSIONS = 10
+K_NEAREST = 5
 
 def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) -> dict:
   """Process the labeled training data and return model parameters stored in a dictionary.
@@ -103,7 +102,7 @@ def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> L
   # label = nearest_neighbour(train, train_labels, test)
 
   # # K Nearest Neighbour - 5 neighbours produces optimal results
-  label = k_nearest_neighbour(train, train_labels, test, 5)
+  label = k_nearest_neighbour_weighted(train, train_labels, test, K_NEAREST)
 
   return label
 
@@ -127,6 +126,54 @@ def k_nearest_neighbour(data, labels, test, k):
     distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
     nearest = labels[np.argsort(distances)[:k]]
     label += mode(nearest)[0][0] # Modal neighbour
+
+  return label
+
+def k_nearest_neighbour_weighted(data, labels, test, k):
+  label = []
+  for sample in test:
+    difference = (data - sample)
+    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+    distances_sorted_idx = np.argsort(distances)
+
+    nearest_neighbours = distances[distances_sorted_idx][:k]
+    nearest_labels = labels[distances_sorted_idx][:k]
+    print("Nearest Labels:")
+    print(nearest_labels)
+    
+    inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
+    weighted_distances = inverse_distance / np.sum(inverse_distance)
+    print("\nWeighted Distrances:")
+    print(weighted_distances)
+
+    # creates an array of indices, sorted by unique element
+    idx_sort = np.argsort(nearest_labels)
+
+    # sorts labels array so all unique elements are together 
+    sorted_labels_array = nearest_labels[idx_sort]
+
+    # returns the unique values, the index of the first occurrence of a value, and the count for each element
+    classes, idx_start, count = np.unique(sorted_labels_array, return_counts=True, return_index=True)
+    classes_list = classes.tolist()
+    # print(classes_list)
+
+    # splits the indices into separate arrays
+    class_idx = np.split(idx_sort, idx_start[1:])
+    class_idx_list = [element.tolist() for element in class_idx]
+    # print(class_idx_list)
+
+    votes = {}
+    for i in range(len(classes_list)):
+      indexes = class_idx_list[i]
+      weights = map(weighted_distances.__getitem__, indexes)
+      votes[classes_list[i]] = sum(list(weights))
+
+    nearest_one = max(votes, key=votes.get)
+    print("\nNearest (Weighted):")
+    print(nearest_one)
+    print("\n")
+
+    label += nearest_one # Modal neighbour
 
   return label
 
@@ -192,30 +239,81 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   fvectors_train = np.array(model["fvectors_train"])
   labels_train = np.array(model["labels_train"])
   number_boards = int(fvectors_test.shape[0] / 64) # This assumes only whole boards are passed in
+  number_square = labels_train.shape[0]
+  frequencies = count_piece_frequency(model)
 
   # Call the classify function.
-  labels = k_nearest_neighbour_weighted(fvectors_train, labels_train, fvectors_test, number_boards, 5)
+  labels = k_nearest_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
   
   # return classify(fvectors_train, labels_train, fvectors_test)
   return labels
 
-def k_nearest_neighbour_weighted(data, labels, test, number_boards, k):
+def k_nearest_filtered(data, labels, test, number_boards, k):
   label = []
   i = 0
   j = 64
   for board in range(number_boards):
+    has_b_king = False
+    has_b_queen = False
+    b_rook_count = 0
+
     for square in range(i, j):
       difference = (data - test[square])
       distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
       nearest = labels[np.argsort(distances)]
 
-      # Remove the pawns from NN if they are in the top or bottom rows (illegal position)
-      if (i <= square < (i+8)) or ((j-8) <= square < j):
+      # Remove the pawns if they are in the top or bottom rows (illegal position)
+      if (i <= square < (i + 8)) or ((j - 8) <= square < j):
         nearest = nearest[(nearest != 'p') & (nearest != 'P')]
 
-      weighted = nearest[:k]
-      label += mode(weighted)[0][0] # Modal neighbour
+      # If black king/queen was already identified, remove from candidates
+      # k/q tends to be in top half of board
+      if has_b_king:
+        nearest = nearest[(nearest != 'k')]
+
+      if has_b_queen:
+        nearest = nearest[(nearest != 'q')]
+
+      # If in top half, disregard White K
+      # White K tends to be in bottom half
+      if (i <= square < (i + 32)):
+        nearest = nearest[(nearest != 'K')]
+
+      # If two black rooks already classified, ignore
+      if b_rook_count == 2:
+        nearest = nearest[(nearest != 'r')]
+        
+      # If the nearest neighbours of second row contain black pawn, replace last neighbour with black pawn
+      if ((i+8) <= square < (i+16)) and (np.count_nonzero(nearest[:k] == 'p')>=2):
+        # nearest = np.append(nearest, 'p')
+        nearest[:k] = ['p']
+
+      # If the nearest neighbours of penultimate row contain white pawn, replace last neighbour with white pawn
+      if ((i+48) <= square < (i+54)) and (np.count_nonzero(nearest[:k] == 'P')>=1):
+        # nearest = np.append(nearest, 'p')
+        nearest[:k] = ['P']
+
+      filtered = nearest[:k]
+      prediction = mode(filtered)[0][0]
+      if prediction == 'k':
+        has_b_king = True
+
+      if prediction == 'q':
+        has_b_queen = True
+
+      if prediction == 'r':
+        b_rook_count +=1
+
+      label += prediction # Modal neighbour
     i = j
     j = j + 64
     
   return label
+
+def count_piece_frequency(model: dict) -> np.ndarray:
+  labels_train = np.array(model["labels_train"])
+  (piece, count) = np.unique(labels_train, return_counts=True)
+  frequency = np.asarray((piece, count)).T
+  d = dict(enumerate(frequency[:,1].astype(np.int).flatten(), 1))
+
+  return frequency

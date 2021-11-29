@@ -44,6 +44,11 @@ def divergence(class1, class2):
 #   X_reduced = lle.fit_transform(X)
 #   return X_reduced
 
+# Remove knights if on edges (bad position in chess)
+# MAKES CLASSIFICATION WORSE!
+# if (square % 8 == 0) or ((square + 1) % 8 == 0):
+#   nearest = nearest[(nearest != 'n') & (nearest != 'N')]
+
 def main():
     """Train the classifier and save the model."""
 
