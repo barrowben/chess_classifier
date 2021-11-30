@@ -1,6 +1,6 @@
 """Chess classification system.
 
-+ Classifier: K Nearest Neighbour
++ Classifier: K Nearest Neighbour (Weighted)
 + Dimensionality Reduction: PCA
 
 Note that both nearest neighbour using cosine distance and
@@ -16,13 +16,10 @@ import matplotlib.cm as cm
 from scipy.stats import mode
 
 N_DIMENSIONS = 10
-K_NEAREST = 5
+K_NEAREST = 6
 
 def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) -> dict:
   """Process the labeled training data and return model parameters stored in a dictionary.
-
-  Note, the contents of the dictionary are up to you, and it can contain any serializable
-  data types stored under any keys. This dictionary will be passed to the classifier.
 
   Args:
       fvectors_train (np.ndarray): training data feature vectors stored as rows.
@@ -61,9 +58,6 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
 def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
   """Reduce the dimensionality of a set of feature vectors down to N_DIMENSIONS.
 
-  The feature vectors are stored in the rows of 2-D array data, (i.e., a data matrix).
-  The dummy implementation below simply returns the first N_DIMENSIONS columns.
-
   Args:
       data (np.ndarray): The feature vectors to reduce.
       model (dict): A dictionary storing the model data that may be needed.
@@ -94,14 +88,14 @@ def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> L
 
   Returns:
       list[str]: A list of one-character strings representing the labels for each square.
-  
-  It is possible to switch between nearest neighbour using cosine distance and
-  k-nearest-neighbour using euclidean distance.
   """
   # # Nearest Neighbour
   # label = nearest_neighbour(train, train_labels, test)
 
-  # # K Nearest Neighbour - 5 neighbours produces optimal results
+  # KNN - standard
+  # label = k_nearest_neighbour(train, train_labels, test, K_NEAREST)
+
+  # K Nearest Neighbour - Weighted
   label = k_nearest_neighbour_weighted(train, train_labels, test, K_NEAREST)
 
   return label
@@ -126,54 +120,6 @@ def k_nearest_neighbour(data, labels, test, k):
     distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
     nearest = labels[np.argsort(distances)[:k]]
     label += mode(nearest)[0][0] # Modal neighbour
-
-  return label
-
-def k_nearest_neighbour_weighted(data, labels, test, k):
-  label = []
-  for sample in test:
-    difference = (data - sample)
-    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
-    distances_sorted_idx = np.argsort(distances)
-
-    nearest_neighbours = distances[distances_sorted_idx][:k]
-    nearest_labels = labels[distances_sorted_idx][:k]
-    print("Nearest Labels:")
-    print(nearest_labels)
-    
-    inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
-    weighted_distances = inverse_distance / np.sum(inverse_distance)
-    print("\nWeighted Distrances:")
-    print(weighted_distances)
-
-    # creates an array of indices, sorted by unique element
-    idx_sort = np.argsort(nearest_labels)
-
-    # sorts labels array so all unique elements are together 
-    sorted_labels_array = nearest_labels[idx_sort]
-
-    # returns the unique values, the index of the first occurrence of a value, and the count for each element
-    classes, idx_start, count = np.unique(sorted_labels_array, return_counts=True, return_index=True)
-    classes_list = classes.tolist()
-    # print(classes_list)
-
-    # splits the indices into separate arrays
-    class_idx = np.split(idx_sort, idx_start[1:])
-    class_idx_list = [element.tolist() for element in class_idx]
-    # print(class_idx_list)
-
-    votes = {}
-    for i in range(len(classes_list)):
-      indexes = class_idx_list[i]
-      weights = map(weighted_distances.__getitem__, indexes)
-      votes[classes_list[i]] = sum(list(weights))
-
-    nearest_one = max(votes, key=votes.get)
-    print("\nNearest (Weighted):")
-    print(nearest_one)
-    print("\n")
-
-    label += nearest_one # Modal neighbour
 
   return label
 
@@ -239,16 +185,17 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   fvectors_train = np.array(model["fvectors_train"])
   labels_train = np.array(model["labels_train"])
   number_boards = int(fvectors_test.shape[0] / 64) # This assumes only whole boards are passed in
-  number_square = labels_train.shape[0]
-  frequencies = count_piece_frequency(model)
 
   # Call the classify function.
-  labels = k_nearest_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
-  
-  # return classify(fvectors_train, labels_train, fvectors_test)
+  # labels = k_nearest_neighbour_weighted(fvectors_train, labels_train, fvectors_test, K_NEAREST)
+  # labels = k_nearest_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
+  labels = k_nearest_neighbour_weighted_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
   return labels
 
 def k_nearest_filtered(data, labels, test, number_boards, k):
+  """K Nearest Neighbour augmented with experiments employing domain-specific knowledge.
+  The function filters out impossible and improbable classifications.
+  Possibly overfitting to the training set."""
   label = []
   i = 0
   j = 64
@@ -270,7 +217,6 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
       # k/q tends to be in top half of board
       if has_b_king:
         nearest = nearest[(nearest != 'k')]
-
       if has_b_queen:
         nearest = nearest[(nearest != 'q')]
 
@@ -285,22 +231,19 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
         
       # If the nearest neighbours of second row contain black pawn, replace last neighbour with black pawn
       if ((i+8) <= square < (i+16)) and (np.count_nonzero(nearest[:k] == 'p')>=2):
-        # nearest = np.append(nearest, 'p')
         nearest[:k] = ['p']
 
       # If the nearest neighbours of penultimate row contain white pawn, replace last neighbour with white pawn
       if ((i+48) <= square < (i+54)) and (np.count_nonzero(nearest[:k] == 'P')>=1):
-        # nearest = np.append(nearest, 'p')
         nearest[:k] = ['P']
 
       filtered = nearest[:k]
       prediction = mode(filtered)[0][0]
+
       if prediction == 'k':
         has_b_king = True
-
       if prediction == 'q':
         has_b_queen = True
-
       if prediction == 'r':
         b_rook_count +=1
 
@@ -310,9 +253,139 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
     
   return label
 
-def count_piece_frequency(model: dict) -> np.ndarray:
-  labels_train = np.array(model["labels_train"])
-  (piece, count) = np.unique(labels_train, return_counts=True)
+def k_nearest_neighbour_weighted(data, labels, test, k):
+  """Nearest neighbour using weights based on inverse distances."""
+  predicted_labels = []
+  for sample in test:
+    # Calculate distances and weights
+    difference = (data - sample)
+    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+    distances_sorted_indexes = np.argsort(distances)
+    nearest_neighbours = distances[distances_sorted_indexes][:k]
+    nearest_labels = labels[distances_sorted_indexes][:k]
+    inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
+    weighted_distances = inverse_distance / np.sum(inverse_distance)
+
+    # Sort label indexes
+    label_indexes_sorted = np.argsort(nearest_labels)
+
+    # Group unique labels
+    sorted_labels_array = nearest_labels[label_indexes_sorted]
+
+    # Get the classes, their starting indexes and frequencies
+    classes, index_start, count = np.unique(sorted_labels_array, return_counts=True, return_index=True)
+    classes_list = classes.tolist()
+
+    # Split up indexes
+    class_index = np.split(label_indexes_sorted, index_start[1:])
+    class_index_list = [element.tolist() for element in class_index]
+
+    # Put the class and summed corresponding weights into dict
+    votes = {}
+    for i in range(len(classes_list)):
+      indexes = class_index_list[i]
+      weights = map(weighted_distances.__getitem__, indexes)
+      votes[classes_list[i]] = sum(list(weights))
+
+    # Get the highest score and add label to predictions
+    prediction = max(votes, key=votes.get)
+    predicted_labels += prediction # Modal neighbour
+
+  return predicted_labels
+
+def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, k):
+  """K nearest neighbour with distance-based weights AND some filtering."""
+  label = []
+  i = 0
+  j = 64
+
+  # Get all classes and their frequencies
+  frequencies = count_piece_frequency(labels)
+  # print(frequencies)
+
+
+  for board in range(number_boards):
+    for square in range(i, j):
+      difference = (data - test[square])
+      distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+      distances_sorted_idx = np.argsort(distances)
+      nearest_neighbours = distances[distances_sorted_idx]
+      nearest_labels = labels[distances_sorted_idx]
+
+      # This is a rather convoluted way of removing the pawns from the candidate list if they are illegal positions
+      # In some cases it leads to +0.1% in the noisy data but it seems to not really do much
+      if (i <= square < (i + 8)) or ((j - 8) <= square < j):
+        classes, idx_start, count = np.unique(nearest_labels, return_counts=True, return_index=True)
+
+        # Get the indexes of where 'P' and 'p' values start
+        index_start_P = (idx_start[4])
+        index_end_P = index_start_P + count[4]
+        index_start_p = (idx_start[10])
+        index_end_p = index_start_p + count[10]
+
+        # Create indices for slicing, then slice and concatenate
+        nn_init_P = nearest_neighbours[0:index_start_P]
+        nn_tail_P = nearest_neighbours[index_end_P:]
+        nearest_neighbours= np.concatenate((nn_init_P, nn_tail_P), axis=None)
+        nn_init_p = nearest_neighbours[0:index_start_p]
+        nn_tail_p = nearest_neighbours[index_end_p:]
+        nearest_neighbours= np.concatenate((nn_init_p, nn_tail_p), axis=None)
+        nn_init_P_lab = nearest_labels[0:index_start_P]
+        nn_tail_P_lab = nearest_labels[index_end_P:]
+        nearest_labels= np.concatenate((nn_init_P_lab, nn_tail_P_lab), axis=None)
+        nn_init_p_lab = nearest_labels[0:index_start_p]
+        nn_tail_p_lab = nearest_labels[index_end_p:]
+        nearest_labels= np.concatenate((nn_init_p_lab, nn_tail_p_lab), axis=None)
+
+      # Reduce to k nearest neighbours
+      nearest_neighbours = nearest_neighbours[:k]
+      nearest_labels = nearest_labels[:k]
+
+      # print("###############################")
+      # print("Distance to nearest neighbours:")
+      # print(nearest_neighbours)
+
+      # print("\nNearest Labels:")
+      # print(nearest_labels)
+
+      inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
+      weighted_distances = inverse_distance / np.sum(inverse_distance)
+      # print("\nWeighted Distances:")
+      # print(weighted_distances)
+
+      # creates an array of indices, sorted by unique element
+      idx_sort = np.argsort(nearest_labels)
+
+      # sorts labels array so all unique elements are together 
+      sorted_labels_array = nearest_labels[idx_sort]
+
+      # returns the unique values, the index of the first occurrence of a value, and the count for each element
+      classes, idx_start, count = np.unique(sorted_labels_array, return_counts=True, return_index=True)
+      classes_list = classes.tolist()
+
+      # splits the indices into separate arrays
+      class_idx = np.split(idx_sort, idx_start[1:])
+      class_idx_list = [element.tolist() for element in class_idx]
+
+      votes = {}
+      for i in range(len(classes_list)):
+        indexes = class_idx_list[i]
+        weights = map(weighted_distances.__getitem__, indexes)
+        votes[classes_list[i]] = sum(list(weights))
+
+      nearest_one = max(votes, key=votes.get)
+      # print("\nPrediction (Weighted):")
+      # print(nearest_one)
+
+      label += nearest_one # Modal neighbour
+
+    i = j
+    j = j + 64
+
+  return label
+
+def count_piece_frequency(labels: np.ndarray) -> np.ndarray:
+  (piece, count) = np.unique(labels, return_counts=True)
   frequency = np.asarray((piece, count)).T
   d = dict(enumerate(frequency[:,1].astype(np.int).flatten(), 1))
 
