@@ -73,9 +73,6 @@ def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
   W10 = eigenvectors.T[:,:10]
   reduced_data = data_centered.dot(W10)
 
-  # Produces poor results (Clean: 18.6%, Noisy: 42.6%)
-  # reduced_data = lle_reduce(data)
-
   return reduced_data
 
 def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> List[str]:
@@ -89,37 +86,14 @@ def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> L
   Returns:
       list[str]: A list of one-character strings representing the labels for each square.
   """
-  # # Nearest Neighbour
+  # NN
   # label = nearest_neighbour(train, train_labels, test)
 
-  # KNN - standard
+  # KNN
   # label = k_nearest_neighbour(train, train_labels, test, K_NEAREST)
 
-  # K Nearest Neighbour - Weighted
+  # Weighted KNN
   label = k_nearest_neighbour_weighted(train, train_labels, test, K_NEAREST)
-
-  return label
-
-def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):    
-  # Nearest Neighbour
-  x = np.dot(chess_test_data, chess_train_data.transpose())
-  modtest = np.sqrt(np.sum(chess_test_data * chess_test_data, axis=1))
-  modtrain = np.sqrt(np.sum(chess_train_data * chess_train_data, axis=1))
-  dist = x / np.outer(modtest, modtrain.transpose())
-
-  # cosine distance
-  nearest = np.argmax(dist, axis=1)
-  predicted_labels = chess_train_labels[nearest]
-
-  return predicted_labels
-
-def k_nearest_neighbour(data, labels, test, k):
-  label = []
-  for sample in test:
-    difference = (data - sample)
-    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
-    nearest = labels[np.argsort(distances)[:k]]
-    label += mode(nearest)[0][0] # Modal neighbour
 
   return label
 
@@ -142,7 +116,6 @@ def images_to_feature_vectors(images: List[np.ndarray]) -> np.ndarray:
 
   return fvectors
 
-
 def classify_squares(fvectors_test: np.ndarray, model: dict) -> List[str]:
   """Run classifier on a array of image feature vectors presented in an arbitrary order.
 
@@ -157,12 +130,8 @@ def classify_squares(fvectors_test: np.ndarray, model: dict) -> List[str]:
   Returns:
     list[str]: A list of one-character strings representing the labels for each square.
   """
-
-  # Get some data out of the model. It's up to you what you've stored in here
   fvectors_train = np.array(model["fvectors_train"])
   labels_train = np.array(model["labels_train"])
-
-  # Call the classify function.
   labels = classify(fvectors_train, labels_train, fvectors_test)
 
   return labels
@@ -184,13 +153,31 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   """
   fvectors_train = np.array(model["fvectors_train"])
   labels_train = np.array(model["labels_train"])
-  number_boards = int(fvectors_test.shape[0] / 64) # This assumes only whole boards are passed in
-
-  # Call the classify function.
+  number_boards = int(fvectors_test.shape[0] / 64)
   # labels = k_nearest_neighbour_weighted(fvectors_train, labels_train, fvectors_test, K_NEAREST)
   # labels = k_nearest_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
   labels = k_nearest_neighbour_weighted_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
   return labels
+
+def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):    
+  x = np.dot(chess_test_data, chess_train_data.transpose())
+  modtest = np.sqrt(np.sum(chess_test_data * chess_test_data, axis=1))
+  modtrain = np.sqrt(np.sum(chess_train_data * chess_train_data, axis=1))
+  dist = x / np.outer(modtest, modtrain.transpose()) # Cosine distance
+  nearest = np.argmax(dist, axis=1)
+  predicted_labels = chess_train_labels[nearest]
+
+  return predicted_labels
+
+def k_nearest_neighbour(data, labels, test, k):
+  label = []
+  for sample in test:
+    difference = (data - sample)
+    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+    nearest = labels[np.argsort(distances)[:k]]
+    label += mode(nearest)[0][0] # Modal neighbour
+
+  return label
 
 def k_nearest_filtered(data, labels, test, number_boards, k):
   """K Nearest Neighbour augmented with experiments employing domain-specific knowledge.
