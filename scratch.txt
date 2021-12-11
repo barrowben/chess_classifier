@@ -1,3 +1,116 @@
+FREQUENCY SCALED IN LIST ORDER
+freq_empty = 0.7475
+freq_B = 0.015
+freq_K =  0.00875
+freq_N = 0.0096875
+freq_P = 0.06953125
+freq_Q = 0.00734375
+freq_R = 0.0171875
+freq_b = 0.00921875
+freq_k = 0.0153125
+freq_n = 0.00765625
+freq_p = 0.06890625
+freq_q = 0.006875
+freq_r = 0.01703125
+
+FREQUENCY SCALED PAIRED
+freq_empty = 0.7475
+freq_P = 0.06953125 *
+freq_p = 0.06890625
+freq_R = 0.0171875 *
+freq_r = 0.01703125
+freq_k = 0.0153125 ***
+freq_B = 0.015 ***
+freq_N = 0.0096875 **
+freq_b = 0.00921875
+freq_K = 0.00875
+freq_n = 0.00765625
+freq_Q = 0.00734375 **
+freq_q = 0.006875
+
+confusion between: K and k
+vote scores: 0.3974254430964113 | 0.38761444204851625
+Choice: [k]
+confusion between: B and K
+vote scores: 0.31057184600236654 | 0.3017233822345589
+Choice: [B]
+confusion between: q and K
+vote scores: 0.4175764982130602 | 0.4148350806804447
+Choice: [K]
+confusion between: b and q
+vote scores: 0.358595210413934 | 0.3368208270638525
+Choice: [b]
+Square mode: score = 98.2% correct
+Board mode: score = 98.1% correct
+Running evaluation with the noisy data.
+confusion between: n and k
+vote scores: 0.40340202512109147 | 0.37937796804843227
+Choice: [k]
+confusion between: Q and k
+vote scores: 0.4172861425556995 | 0.413954238203329
+Choice: [k]
+confusion between: k and n
+vote scores: 0.4185317175604597 | 0.3702326277985869
+Choice: [k]
+confusion between: k and n
+vote scores: 0.42351223323716497 | 0.4074590174890661
+Choice: [k]
+confusion between: P and B
+vote scores: 0.41057668759486643 | 0.40426616823236816
+Choice: [P]
+confusion between: K and r
+vote scores: 0.37016593588594626 | 0.36794748863790905
+Choice: [r]
+confusion between: K and R
+vote scores: 0.3576156776420033 | 0.3462985940426333
+Choice: [R]
+confusion between: Q and R
+vote scores: 0.44031424327230806 | 0.3920237731456314
+Choice: [R]
+confusion between: K and B
+vote scores: 0.3866173514343864 | 0.37224235313606047
+Choice: [B]
+confusion between: N and R
+vote scores: 0.40736668930052844 | 0.3966405806237933
+Choice: [R]
+confusion between: b and r
+vote scores: 0.41744178063335724 | 0.4041343712450558
+Choice: [r]
+confusion between: R and P
+vote scores: 0.4124610404094716 | 0.4079573348691061
+Choice: [P]
+confusion between: K and k
+vote scores: 0.3787819767769479 | 0.3623890070759612
+Choice: [k]
+confusion between: n and k
+vote scores: 0.40391452293722363 | 0.39969191435643114
+Choice: [k]
+confusion between: r and B
+vote scores: 0.398015472535602 | 0.3835882022639415
+Choice: [r]
+confusion between: N and Q
+vote scores: 0.3429467423037183 | 0.3311684426745584
+Choice: [N]
+confusion between: b and q
+vote scores: 0.3308995943198976 | 0.31217160274045236
+Choice: [b]
+confusion between: P and B
+vote scores: 0.31209150698026844 | 0.2953124660380385
+Choice: [P]
+confusion between: k and r
+vote scores: 0.4252225859901943 | 0.38445609454690793
+Choice: [r]
+confusion between: K and k
+vote scores: 0.40340288606258795 | 0.39837401308376685
+Choice: [k]
+confusion between: q and n
+vote scores: 0.42267104571267666 | 0.3998642999412849
+Choice: [n]
+
+
+
+
+
 What do we know with the board:
     + Total Number of pieces
     + Positions

@@ -14,9 +14,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from scipy.stats import mode
+import collections
+import operator
 
 N_DIMENSIONS = 10
-K_NEAREST = 6
+K_NEAREST = 5
 
 def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) -> dict:
   """Process the labeled training data and return model parameters stored in a dictionary.
@@ -31,6 +33,7 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
   # Center the data
   mean = fvectors_train.mean(axis=0)
   data_centered = fvectors_train - mean
+  var = np.var(fvectors_train)
   
   # Get principal components - the rows of Vh are the eigenvectors
   U, S, Vh = np.linalg.svd(data_centered)
@@ -45,6 +48,23 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
   e9 = Vh.T[:,8].tolist()
   e10 = Vh.T[:,9].tolist()
 
+  # Get the frequencies of the pieces and scale them relative to the number of squares
+  number_squares = fvectors_train.shape[0]
+  frequencies = count_piece_frequency(labels_train)
+  freq_empty = frequencies[0][1].astype(np.int) / number_squares
+  freq_B = frequencies[1][1].astype(np.int) / number_squares
+  freq_K = frequencies[2][1].astype(np.int) / number_squares
+  freq_N = frequencies[3][1].astype(np.int) / number_squares
+  freq_P = frequencies[4][1].astype(np.int) / number_squares
+  freq_Q = frequencies[5][1].astype(np.int) / number_squares
+  freq_R = frequencies[6][1].astype(np.int) / number_squares
+  freq_b = frequencies[7][1].astype(np.int) / number_squares
+  freq_k = frequencies[8][1].astype(np.int) / number_squares
+  freq_n = frequencies[9][1].astype(np.int) / number_squares
+  freq_p = frequencies[10][1].astype(np.int) / number_squares
+  freq_q = frequencies[11][1].astype(np.int) / number_squares
+  freq_r = frequencies[12][1].astype(np.int) / number_squares
+
   # Create the model data
   model = {}
   model["labels_train"] = labels_train.tolist()
@@ -52,6 +72,7 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
   model["eigenvectors"] = [e1, e2, e3, e4, e5, e6, e7, e8, e9, e10]
   fvectors_train_reduced = reduce_dimensions(fvectors_train, model)
   model["fvectors_train"] = fvectors_train_reduced.tolist()
+  model["frequencies_scaled"] = [freq_empty, freq_B, freq_K, freq_N, freq_P, freq_Q, freq_R, freq_b, freq_k, freq_n, freq_p, freq_q, freq_r]
 
   return model
 
@@ -70,10 +91,11 @@ def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
   eigenvectors = np.array(model["eigenvectors"])
 
   # Project training set onto 10D plane
-  W10 = eigenvectors.T[:,:10]
-  reduced_data = data_centered.dot(W10)
+  P10 = eigenvectors.T[:,:10]
+  reduced_data = data_centered.dot(P10)
 
   return reduced_data
+
 
 def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> List[str]:
   """Classify a set of feature vectors using a training set.
@@ -154,11 +176,16 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   fvectors_train = np.array(model["fvectors_train"])
   labels_train = np.array(model["labels_train"])
   number_boards = int(fvectors_test.shape[0] / 64)
+  frequencies_scaled = model["frequencies_scaled"]
+
+  # Call the classification function
   # labels = k_nearest_neighbour_weighted(fvectors_train, labels_train, fvectors_test, K_NEAREST)
   # labels = k_nearest_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
-  labels = k_nearest_neighbour_weighted_filtered(fvectors_train, labels_train, fvectors_test, number_boards, K_NEAREST)
+  labels = k_nearest_neighbour_weighted_filtered(fvectors_train, labels_train, fvectors_test, number_boards, frequencies_scaled, K_NEAREST)
+
   return labels
 
+# Find the nearest neighbour, using cosine distance
 def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):    
   x = np.dot(chess_test_data, chess_train_data.transpose())
   modtest = np.sqrt(np.sum(chess_test_data * chess_test_data, axis=1))
@@ -169,16 +196,19 @@ def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):
 
   return predicted_labels
 
+# Find the k-nearest neighbours, using euclidean distance
 def k_nearest_neighbour(data, labels, test, k):
   label = []
   for sample in test:
     difference = (data - sample)
-    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+    distances = np.sum(difference * difference, axis=1) # Euclidean distance leaving out the sqrt as it's monotonic and we only care about the order
     nearest = labels[np.argsort(distances)[:k]]
     label += mode(nearest)[0][0] # Modal neighbour
 
   return label
 
+# Find the k-nearest neighbours, using euclidean distance
+# Also filters out illegal and improbable classifications
 def k_nearest_filtered(data, labels, test, number_boards, k):
   """K Nearest Neighbour augmented with experiments employing domain-specific knowledge.
   The function filters out impossible and improbable classifications.
@@ -240,13 +270,15 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
     
   return label
 
+# Find the k-nearest neighbours, using euclidean distance
+# Weights the votes according to inverse distances
 def k_nearest_neighbour_weighted(data, labels, test, k):
   """Nearest neighbour using weights based on inverse distances."""
   predicted_labels = []
   for sample in test:
     # Calculate distances and weights
     difference = (data - sample)
-    distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+    distances = np.sqrt(np.sum(difference * difference, axis=1)) # As the weights are based on distance, the sqrt is important
     distances_sorted_indexes = np.argsort(distances)
     nearest_neighbours = distances[distances_sorted_indexes][:k]
     nearest_labels = labels[distances_sorted_indexes][:k]
@@ -280,31 +312,37 @@ def k_nearest_neighbour_weighted(data, labels, test, k):
 
   return predicted_labels
 
-def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, k):
-  """K nearest neighbour with distance-based weights AND some filtering."""
-  # Init
-  frequencies = count_piece_frequency(labels)
+# Find the k-nearest neighbours, using euclidean distance
+# Uses weights based on inverse distance and piece frequency
+# Also filters out illegal and improbable classifications
+def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, frequencies_scaled, k):
+  """K nearest neighbour with inverse distance-based weights and some filtering."""
   label = []
   i = 0
   j = 64
 
   for board in range(number_boards):
+    has_b_king = False
+    has_b_queen = False
+    b_rook_count = 0
+
+    # print("\n=== START BOARD " + str(board + 1) + " ===")
     for square in range(i, j):
       # Calculate distances and weights
       difference = (data - test[square])
-      distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
+      distances = np.sqrt(np.sum(difference * difference, axis=1))
       distances_sorted_idx = np.argsort(distances)
       nearest_neighbours = distances[distances_sorted_idx]
       nearest_labels = labels[distances_sorted_idx]
 
-      # This is a rather convoluted way of removing the pawns from the candidate list if they are illegal positions
+      # This is a rather convoluted way of removing the pawns from the candidate list if they are in illegal positions
       if (i <= square < (i + 8)) or ((j - 8) <= square < j):
-        classes, idx_start, count = np.unique(nearest_labels, return_counts=True, return_index=True)
+        classes, index_start, count = np.unique(nearest_labels, return_counts=True, return_index=True)
 
         # Get the indexes of where 'P' and 'p' values start
-        index_start_P = (idx_start[4])
+        index_start_P = (index_start[4])
         index_end_P = index_start_P + count[4]
-        index_start_p = (idx_start[10])
+        index_start_p = (index_start[10])
         index_end_p = index_start_p + count[10]
 
         # Create indices for slicing, then slice and concatenate
@@ -327,29 +365,99 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, k):
       inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
       weighted_distances = inverse_distance / np.sum(inverse_distance)
 
-      # Sort label indexes
+      # Sort label indices
       label_indexes_sorted = np.argsort(nearest_labels)
 
       # Group unique labels
       sorted_labels_array = nearest_labels[label_indexes_sorted]
 
-      # Get the classes, their starting indexes and frequencies
+      # Get the classes, their starting indices and frequencies
       classes, index_start, count = np.unique(sorted_labels_array, return_counts=True, return_index=True)
       classes_list = classes.tolist()
 
-      # Split up indexes
+      # Split up indices
       class_idx = np.split(label_indexes_sorted, index_start[1:])
       class_idx_list = [element.tolist() for element in class_idx]
 
-      # Put the class and summed corresponding weights into dict
+      # Put the class and summed corresponding weights into a dict
       votes = {}
       for i in range(len(classes_list)):
         indexes = class_idx_list[i]
         weights = map(weighted_distances.__getitem__, indexes)
         votes[classes_list[i]] = sum(list(weights))
-    
+
+        # Remove black king/queen/rooks if already identified for this board and they are not the only potential candidates
+        # We remove just the black pieces because they are at the top of the board and tend to be identified first
+        if has_b_king and "k" in votes and len(votes) > 1:
+          votes.pop("k")
+        if has_b_queen and "q" in votes and len(votes) > 1:
+          votes.pop("q")
+        if b_rook_count == 2 and "r" in votes and len(votes) > 1:
+          votes.pop("r")
+
+      # Sort the votes by values, get the number of candidates and the labels
+      sorted_votes = sorted(votes.items(), key=operator.itemgetter(1), reverse=True)
+      number_candidates = len(sorted_votes)
+      candidate_labels = [tuple[0] for tuple in sorted_votes][:2]
+
+      # Look at the number of candidates and the difference between the highest votes
+      # If the difference is low, then give preference to the more common piece
+      # As the number of candidates increases, the confidence drops, so more options are opened up
+      if number_candidates == 1:
+        pass
+      elif number_candidates == 2:
+        if abs(sorted_votes[0][1] - sorted_votes[1][1]) < 0.03:
+          if "P" in candidate_labels:
+            votes["P"] += frequencies_scaled[4]
+          elif "p" in candidate_labels:
+            votes["p"] += frequencies_scaled[10]
+      elif number_candidates == 3 and (abs(sorted_votes[0][1] - sorted_votes[1][1])) < 0.1:
+          if "P" in candidate_labels:
+            votes["P"] += frequencies_scaled[4]
+          elif "p" in candidate_labels:
+            votes["p"] += frequencies_scaled[10]
+          elif "R" in candidate_labels:
+            votes["R"] += frequencies_scaled[6]
+          elif "r" in candidate_labels:
+            votes["r"] += frequencies_scaled[12]
+      elif number_candidates == 4 and (abs(sorted_votes[0][1] - sorted_votes[1][1])) < 0.2:
+          if "." in candidate_labels:
+            votes["."] += frequencies_scaled[0]
+          elif "P" in candidate_labels:
+            votes["P"] += frequencies_scaled[4]
+          elif "p" in candidate_labels:
+            votes["p"] += frequencies_scaled[10]
+          elif "R" in candidate_labels:
+            votes["R"] += frequencies_scaled[6]
+          elif "r" in candidate_labels:
+            votes["r"] += frequencies_scaled[12]
+          elif "k" in candidate_labels:
+            votes["k"] += frequencies_scaled[8]
+          elif "B" in candidate_labels:
+            votes["B"] += frequencies_scaled[1]
+          elif "N" in candidate_labels:
+            votes["N"] += frequencies_scaled[3]
+          elif "b" in candidate_labels:
+            votes["b"] += frequencies_scaled[7]
+          elif "K" in candidate_labels:
+            votes["K"] += frequencies_scaled[2]
+          elif "n" in candidate_labels:
+            votes["n"] += frequencies_scaled[9]
+          elif "Q" in candidate_labels:
+            votes["Q"] += frequencies_scaled[5]
+          elif "q" in candidate_labels:
+            votes["q"] += frequencies_scaled[11]
+
       # Get the highest score and add label to predictions
       prediction = max(votes, key=votes.get)
+
+      if prediction == 'k':
+        has_b_king = True
+      if prediction == 'q':
+        has_b_queen = True
+      if prediction == 'r':
+        b_rook_count += 1
+
       label += prediction
 
     i = j
@@ -361,6 +469,5 @@ def count_piece_frequency(labels: np.ndarray) -> np.ndarray:
   "Helper function to get classes and their frequencies"
   (piece, count) = np.unique(labels, return_counts=True)
   frequency = np.asarray((piece, count)).T
-  d = dict(enumerate(frequency[:,1].astype(np.int).flatten(), 1))
 
   return frequency
