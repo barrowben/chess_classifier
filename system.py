@@ -11,10 +11,7 @@ the classifier function.
 """
 from typing import List
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-from scipy.stats import mode
-import collections
+import scipy.stats as stats
 import operator
 
 N_DIMENSIONS = 10
@@ -33,7 +30,6 @@ def process_training_data(fvectors_train: np.ndarray, labels_train: np.ndarray) 
   # Center the data
   mean = fvectors_train.mean(axis=0)
   data_centered = fvectors_train - mean
-  var = np.var(fvectors_train)
   
   # Get principal components - the rows of Vh are the eigenvectors
   U, S, Vh = np.linalg.svd(data_centered)
@@ -87,10 +83,10 @@ def reduce_dimensions(data: np.ndarray, model: dict) -> np.ndarray:
       np.ndarray: The reduced feature vectors.
   """
   # PCA assumes data is centered, so we need to subtract the mean
-  data_centered = data - model["mean"]
+  data_centered = (data - model["mean"])
   eigenvectors = np.array(model["eigenvectors"])
 
-  # Project training set onto 10D plane
+  # Project onto 10D plane
   P10 = eigenvectors.T[:,:10]
   reduced_data = data_centered.dot(P10)
 
@@ -108,6 +104,7 @@ def classify(train: np.ndarray, train_labels: np.ndarray, test: np.ndarray) -> L
   Returns:
       list[str]: A list of one-character strings representing the labels for each square.
   """
+
   # NN
   # label = nearest_neighbour(train, train_labels, test)
 
@@ -158,7 +155,6 @@ def classify_squares(fvectors_test: np.ndarray, model: dict) -> List[str]:
 
   return labels
 
-
 def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
   """Run classifier on a array of image feature vectors presented in 'board order'.
 
@@ -185,34 +181,67 @@ def classify_boards(fvectors_test: np.ndarray, model: dict) -> List[str]:
 
   return labels
 
-# Find the nearest neighbour, using cosine distance
-def nearest_neighbour(chess_train_data, chess_train_labels, chess_test_data):    
-  x = np.dot(chess_test_data, chess_train_data.transpose())
-  modtest = np.sqrt(np.sum(chess_test_data * chess_test_data, axis=1))
-  modtrain = np.sqrt(np.sum(chess_train_data * chess_train_data, axis=1))
+def nearest_neighbour(fvectors_train: np.ndarray, labels_train: np.ndarray, fvectors_test: np.ndarray) -> List[str]:  
+  """ Find the nearest neighbour, using cosine distance.
+  
+    Args:
+    fvectors_train (np.ndarray): An array of trainig data in which feature vectors are stored as rows.
+    labels_train (np.ndarray): 1-D array storing the training labels.
+    fvectors_test (np.ndarray): 2-D array storing the test feature vectors.
+
+  Returns:
+    predicted_labels (list[str]): A list of one-character strings representing the labels for each square.
+  """  
+  x = np.dot(fvectors_test, fvectors_train.transpose())
+  modtest = np.sqrt(np.sum(fvectors_test * fvectors_test, axis=1))
+  modtrain = np.sqrt(np.sum(fvectors_train * fvectors_train, axis=1))
   dist = x / np.outer(modtest, modtrain.transpose()) # Cosine distance
   nearest = np.argmax(dist, axis=1)
-  predicted_labels = chess_train_labels[nearest]
+  predicted_labels = labels_train[nearest]
 
   return predicted_labels
 
-# Find the k-nearest neighbours, using euclidean distance
-def k_nearest_neighbour(data, labels, test, k):
+def k_nearest_neighbour(fvectors_train: np.ndarray, labels_train: np.ndarray, fvectors_test: np.ndarray, k) -> List[str]:
+  """ Find the k nearest neighbours, using euclidean distance.
+
+  Args:
+  fvectors_train (np.ndarray): An array of trainig data in which feature vectors are stored as rows.
+  chess_train_labels (np.ndarray): 1-D array storing the training labels.
+  fvectors_test (np.ndarray): 2-D array storing the test feature vectors.
+  k (int): number of nearest neighbours to select.
+
+  Returns:
+    predicted_labels (list[str]): A list of one-character strings representing the labels for each square.
+  """
   label = []
-  for sample in test:
-    difference = (data - sample)
+  for sample in fvectors_test:
+    difference = (fvectors_train - sample)
     distances = np.sum(difference * difference, axis=1) # Euclidean distance leaving out the sqrt as it's monotonic and we only care about the order
-    nearest = labels[np.argsort(distances)[:k]]
-    label += mode(nearest)[0][0] # Modal neighbour
+    nearest = labels_train[np.argsort(distances)[:k]]
+    label += stats.mode(nearest)[0][0] # Modal neighbour
 
   return label
 
 # Find the k-nearest neighbours, using euclidean distance
 # Also filters out illegal and improbable classifications
-def k_nearest_filtered(data, labels, test, number_boards, k):
+def k_nearest_filtered(fvectors_train: np.ndarray, labels_train: np.ndarray, fvectors_test: np.ndarray, number_boards, k) -> List[str]:
   """K Nearest Neighbour augmented with experiments employing domain-specific knowledge.
   The function filters out impossible and improbable classifications.
-  Possibly overfitting to the training set."""
+
+  The function is not actually used, but has been left in for demonstration purposes.
+  It is also the most accurate classifier.
+
+  Args:
+    fvectors_train (np.ndarray): An array of training data in which feature vectors are stored as rows.
+    labels_train (np.ndarray): the labels corresponding to the feature vectors.
+    fvectors_test (np.ndarray): An array of test data in which feature vectors are stored as rows.
+    number_boards (int): totaly number of complete boards in the test data set
+    frequencies_scaled (list[int]): freqeuncies of labels in training data set, scaled by total number
+    k (int): number of nearest neighbours to select from
+
+  Returns:
+    label (list[str]): A list of one-character strings representing the labels for each square.
+  """
   label = []
   i = 0
   j = 64
@@ -222,9 +251,9 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
     b_rook_count = 0
 
     for square in range(i, j):
-      difference = (data - test[square])
-      distances = np.sum(difference * difference, axis=1) # Leave out the sqrt as it's monotonic
-      nearest = labels[np.argsort(distances)]
+      difference = (fvectors_train - fvectors_test[square])
+      distances = np.sqrt(np.sum(difference * difference, axis=1))
+      nearest = labels_train[np.argsort(distances)]
 
       # Remove the pawns if they are in the top or bottom rows (illegal position)
       if (i <= square < (i + 8)) or ((j - 8) <= square < j):
@@ -255,7 +284,7 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
         nearest[:k] = ['P']
 
       filtered = nearest[:k]
-      prediction = mode(filtered)[0][0]
+      prediction = stats.mode(filtered)[0][0]
 
       if prediction == 'k':
         has_b_king = True
@@ -272,16 +301,27 @@ def k_nearest_filtered(data, labels, test, number_boards, k):
 
 # Find the k-nearest neighbours, using euclidean distance
 # Weights the votes according to inverse distances
-def k_nearest_neighbour_weighted(data, labels, test, k):
-  """Nearest neighbour using weights based on inverse distances."""
+def k_nearest_neighbour_weighted(fvectors_train: np.ndarray, labels_train: np.ndarray, fvectors_test: np.ndarray, k) -> List[str]:
+  """K nearest neighbour with inverse distance-based weights and some filtering.
+  Uses weights based on inverse distances and filters out illeagal and improbable classifications
+  
+  Args:
+    fvectors_train (np.ndarray): An array of training data in which feature vectors are stored as rows.
+    labels_train (np.ndarray): the labels corresponding to the feature vectors.
+    fvectors_test (np.ndarray): An array of test data in which feature vectors are stored as rows.
+    k (int): number of nearest neighbours to select from
+
+  Returns:
+    label (list[str]): A list of one-character strings representing the labels for each square.
+  """
   predicted_labels = []
-  for sample in test:
+  for sample in fvectors_test:
     # Calculate distances and weights
-    difference = (data - sample)
-    distances = np.sqrt(np.sum(difference * difference, axis=1)) # As the weights are based on distance, the sqrt is important
+    difference = (fvectors_train - sample)
+    distances = np.sqrt(np.sum(difference * difference, axis=1)) # Sqrt is important to give accurate distances for weights
     distances_sorted_indexes = np.argsort(distances)
     nearest_neighbours = distances[distances_sorted_indexes][:k]
-    nearest_labels = labels[distances_sorted_indexes][:k]
+    nearest_labels = labels_train[distances_sorted_indexes][:k]
     inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
     weighted_distances = inverse_distance / np.sum(inverse_distance)
 
@@ -312,11 +352,21 @@ def k_nearest_neighbour_weighted(data, labels, test, k):
 
   return predicted_labels
 
-# Find the k-nearest neighbours, using euclidean distance
-# Uses weights based on inverse distance and piece frequency
-# Also filters out illegal and improbable classifications
-def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, frequencies_scaled, k):
-  """K nearest neighbour with inverse distance-based weights and some filtering."""
+def k_nearest_neighbour_weighted_filtered(fvectors_train: np.ndarray, labels_train: np.ndarray, fvectors_test: np.ndarray, number_boards: int, frequencies_scaled: List[int], k: int) -> List[str]:
+  """K nearest neighbour with inverse distance-based weights and some filtering.
+  Uses weights based on inverse distances and filters out illeagal and improbable classifications
+  
+  Args:
+    fvectors_train (np.ndarray): An array of training data in which feature vectors are stored as rows.
+    labels_train (np.ndarray): the labels corresponding to the feature vectors.
+    fvectors_test (np.ndarray): An array of test data in which feature vectors are stored as rows.
+    number_boards (int): totaly number of complete boards in the test data set
+    frequencies_scaled (list[int]): freqeuncies of labels in training data set, scaled by total number
+    k (int): number of nearest neighbours to select from
+
+  Returns:
+    label (list[str]): A list of one-character strings representing the labels for each square.
+  """
   label = []
   i = 0
   j = 64
@@ -325,17 +375,18 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
     has_b_king = False
     has_b_queen = False
     b_rook_count = 0
+    b_bishop_count = 0
+    b_pawn_count = 0
 
-    # print("\n=== START BOARD " + str(board + 1) + " ===")
     for square in range(i, j):
       # Calculate distances and weights
-      difference = (data - test[square])
+      difference = (fvectors_train - fvectors_test[square])
       distances = np.sqrt(np.sum(difference * difference, axis=1))
       distances_sorted_idx = np.argsort(distances)
       nearest_neighbours = distances[distances_sorted_idx]
-      nearest_labels = labels[distances_sorted_idx]
+      nearest_labels = labels_train[distances_sorted_idx]
 
-      # This is a rather convoluted way of removing the pawns from the candidate list if they are in illegal positions
+      # Remove the pawns from the candidate list if they are in illegal positions
       if (i <= square < (i + 8)) or ((j - 8) <= square < j):
         classes, index_start, count = np.unique(nearest_labels, return_counts=True, return_index=True)
 
@@ -359,16 +410,14 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
         nn_tail_p_lab = nearest_labels[index_end_p:]
         nearest_labels= np.concatenate((nn_init_p_lab, nn_tail_p_lab), axis=None)
 
-      # Reduce to K neighbours, calculate distances and weights
+      # Reduce to K neighbours, calculate inverse distances and weights
       nearest_neighbours = nearest_neighbours[:k]
       nearest_labels = nearest_labels[:k]
       inverse_distance = 1 / (nearest_neighbours + 0.0000000000001) # Add a small constant to avoid `div` 0
       weighted_distances = inverse_distance / np.sum(inverse_distance)
 
-      # Sort label indices
+      # Sort label indices & group them
       label_indexes_sorted = np.argsort(nearest_labels)
-
-      # Group unique labels
       sorted_labels_array = nearest_labels[label_indexes_sorted]
 
       # Get the classes, their starting indices and frequencies
@@ -394,8 +443,12 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
           votes.pop("q")
         if b_rook_count == 2 and "r" in votes and len(votes) > 1:
           votes.pop("r")
+        if b_bishop_count == 2 and "b" in votes and len(votes) > 1:
+          votes.pop("b")
+        if b_pawn_count == 8 and "p" in votes and len(votes) > 1:
+          votes.pop("p")        
 
-      # Sort the votes by values, get the number of candidates and the labels
+      # Sort the votes by values, get the number of candidates and the labels of the first 2 candidates
       sorted_votes = sorted(votes.items(), key=operator.itemgetter(1), reverse=True)
       number_candidates = len(sorted_votes)
       candidate_labels = [tuple[0] for tuple in sorted_votes][:2]
@@ -403,9 +456,7 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
       # Look at the number of candidates and the difference between the highest votes
       # If the difference is low, then give preference to the more common piece
       # As the number of candidates increases, the confidence drops, so more options are opened up
-      if number_candidates == 1:
-        pass
-      elif number_candidates == 2:
+      if number_candidates == 2:
         if abs(sorted_votes[0][1] - sorted_votes[1][1]) < 0.03:
           if "P" in candidate_labels:
             votes["P"] += frequencies_scaled[4]
@@ -420,7 +471,7 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
             votes["R"] += frequencies_scaled[6]
           elif "r" in candidate_labels:
             votes["r"] += frequencies_scaled[12]
-      elif number_candidates == 4 and (abs(sorted_votes[0][1] - sorted_votes[1][1])) < 0.2:
+      elif number_candidates == 4 and (abs(sorted_votes[0][1] - sorted_votes[1][1])) < 0.3:
           if "." in candidate_labels:
             votes["."] += frequencies_scaled[0]
           elif "P" in candidate_labels:
@@ -457,6 +508,10 @@ def k_nearest_neighbour_weighted_filtered(data, labels, test, number_boards, fre
         has_b_queen = True
       if prediction == 'r':
         b_rook_count += 1
+      if prediction == 'b':
+        b_bishop_count += 1
+      if prediction == 'p':
+        b_pawn_count += 1
 
       label += prediction
 
